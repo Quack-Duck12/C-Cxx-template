@@ -7,32 +7,32 @@ CXX := g++
 SRC_DIR := src
 OBJ_BASE_DIR := obj
 
-# Add your custom libraries here (e.g., -lm -lpthread)
-CUSTOM_LIBS :=
+# Add your custom libraries here (e.g., -lglfw3 -lbox2d)
+CUSTOM_LIBS  :=
+# Add your custom compiler flags here (e.g., -Wno-missing-field-initializers)
+CUSTOM_FLAGS :=
 
 # ========================
 # Language standard selection
 # ========================
-C_STD   ?= c11
-CXX_STD ?= c++17
+C_STD   ?= c11   # C standard (c89, c99, c11, c17, c2x)
+CXX_STD ?= c++17 # C++ standard (c++98, c++11, c++14, c++17, c++20, c++23)
 
 # ========================
 # Configurable compiler flags (true/false)
 # ========================
-WALL      := $(or $(WALL),true)
-WERROR    := $(or $(WERROR),true)
-WEXTRA    := $(or $(WEXTRA),true)
-WPEDANTIC := $(or $(WPEDANTIC),false)
-WSHADOW   := $(or $(WSHADOW),false)
+WALL      := $(or $(WALL),		true)
+WERROR    := $(or $(WERROR),	true)
+WEXTRA    := $(or $(WEXTRA),	true)
+WPEDANTIC := $(or $(WPEDANTIC),	false)
+WSHADOW   := $(or $(WSHADOW),	false)
 
-# Build warning flags
 WARNING_FLAGS := $(if $(filter true,$(WALL)),-Wall) \
                  $(if $(filter true,$(WERROR)),-Werror) \
                  $(if $(filter true,$(WEXTRA)),-Wextra) \
                  $(if $(filter true,$(WPEDANTIC)),-Wpedantic) \
                  $(if $(filter true,$(WSHADOW)),-Wshadow)
 
-# Standard flags
 STD_FLAGS := -std=$(C_STD)
 CXX_STD_FLAGS := -std=$(CXX_STD)
 
@@ -59,10 +59,11 @@ endif
 # Build mode default
 # ========================
 MODE ?= release
+
 OBJ_DIR := $(OBJ_BASE_DIR)/$(PLATFORM)/$(MODE)
 
 # ========================
-# OS-specific commands
+# OS-specific shell commands
 # ========================
 ifeq ($(PLATFORM),Windows)
     TARGET := $(TARGET_BASE).exe
@@ -70,30 +71,33 @@ ifeq ($(PLATFORM),Windows)
     RMEXE_CMD  = if exist "$(TARGET)" del /q "$(TARGET)"
     RUN_CMD    = "$(CURDIR)/$(TARGET)"
     BLANK_CMD  = echo.
+    PLATFORM_LIBS :=
 else
     TARGET := $(TARGET_BASE)
     MKDIR_CMD  = mkdir -p "$(OBJ_DIR)"
     RMEXE_CMD  = rm -f "$(TARGET)"
     RUN_CMD    = "$(CURDIR)/$(TARGET)"
     BLANK_CMD  = echo
+    PLATFORM_LIBS :=
 endif
 
 # ========================
-# Include + libraries
+# Include + lib paths
 # ========================
 INCLUDES := -I"$(CURDIR)/include"
-LDFLAGS  := $(CUSTOM_LIBS)
+COMMON_LDFLAGS := -L"$(CURDIR)/lib/$(PLATFORM)" -L"$(CURDIR)/lib" $(CUSTOM_LIBS)
+LDFLAGS := $(COMMON_LDFLAGS) $(PLATFORM_LIBS)
 
 # ========================
-# Build mode flags
+# Build mode selection
 # ========================
 ifeq ($(MODE),debug)
-    CFLAGS   := $(STD_FLAGS) $(WARNING_FLAGS) -Og -g -D_DEBUG
-    CXXFLAGS := $(CXX_STD_FLAGS) $(WARNING_FLAGS) -Og -g -D_DEBUG
+    CFLAGS   := $(STD_FLAGS) $(WARNING_FLAGS) $(CUSTOM_FLAGS) -Og -g -D_DEBUG
+    CXXFLAGS := $(CXX_STD_FLAGS) $(WARNING_FLAGS) $(CUSTOM_FLAGS) -Og -g -D_DEBUG
 endif
 ifeq ($(MODE),release)
-    CFLAGS   := $(STD_FLAGS) $(WARNING_FLAGS) -O2 -DNDEBUG
-    CXXFLAGS := $(CXX_STD_FLAGS) $(WARNING_FLAGS) -O2 -DNDEBUG
+    CFLAGS   := $(STD_FLAGS) $(WARNING_FLAGS) $(CUSTOM_FLAGS) -O2 -DNDEBUG
+    CXXFLAGS := $(CXX_STD_FLAGS) $(WARNING_FLAGS) $(CUSTOM_FLAGS) -O2 -DNDEBUG
 endif
 
 # ========================
@@ -105,14 +109,13 @@ C_OBJECTS   := $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(C_SOURCES))
 CPP_OBJECTS := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(CPP_SOURCES))
 OBJECTS := $(C_OBJECTS) $(CPP_OBJECTS)
 
-# Use C++ linker if any C++ files exist
 ifeq ($(strip $(CPP_SOURCES)),)
     LINKER := $(CC)
 else
     LINKER := $(CXX)
 endif
 
-.PHONY: all build debug release run clean clean-output help info purge
+.PHONY: all build debug release run clean clean-output help info debug-run purge
 
 # ========================
 # Targets
@@ -215,19 +218,22 @@ endif
 
 help:
 	@$(BLANK_CMD)
-	@printf "Available targets:\n"
-	@printf "make\tmake release\tBuild in release mode (-O2 -DNDEBUG)\n"
-	@printf "make debug\t\tBuild in debug mode (-Og -g -D_DEBUG)\n"
-	@printf "make run\t\tBuild and run (release mode)\n"
-	@printf "make debug-run\t\tBuild and run (debug mode)\n"
-	@printf "make clean\t\tRemove current OS/mode objects + exe\n"
-	@printf "make clean-output\tRemove only OS executable\n"
-	@printf "make purge\t\tRemove all objects and executables\n"
-	@printf "make info\t\tShow build configuration\n"
-	@printf "\n"
-	@printf "Configurable flags (true/false):\n"
-	@printf "WALL=%s\tWERROR=%s\tWEXTRA=%s\tWPEDANTIC=%s\tWSHADOW=%s\n" \
-		"$(WALL)" "$(WERROR)" "$(WEXTRA)" "$(WPEDANTIC)" "$(WSHADOW)"
-	@printf "\n"
-	@printf "Example:\tmake WERROR=false WEXTRA=true\n"
+	@echo Available targets:
+	@echo   make / make release  - Build in release mode (-O2 -DNDEBUG)
+	@echo   make debug           - Build in debug mode (-Og -g -D_DEBUG)
+	@echo   make run             - Build and run (release mode)
+	@echo   make debug-run       - Build and run (debug mode)
+	@echo   make clean           - Remove current OS/mode objects + exe
+	@echo   make clean-output    - Remove only OS executable
+	@echo   make purge           - Remove all objects and all executables
+	@echo   make info            - Show build configuration
+	@$(BLANK_CMD)
+	@echo Configurable flags (set to true/false):
+	@echo   WALL=$(WALL)
+	@echo   WERROR=$(WERROR)
+	@echo   WEXTRA=$(WEXTRA)
+	@echo   WPEDANTIC=$(WPEDANTIC)
+	@echo   WSHADOW=$(WSHADOW)
+	@$(BLANK_CMD)
+	@echo Example: make WERROR=false WEXTRA=true
 	@$(BLANK_CMD)
